@@ -1,0 +1,134 @@
+---
+title: 'Practical Machine Learning: HAR Weight Lifting Class Prediction Assignment'
+author: "Jacqueline Galimany"
+date: "6/26/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(dplyr)
+library(corrplot)
+library(RColorBrewer)
+library(caret)
+library(randomForest)
+library(gbm)
+library(knitr)
+```
+
+# Executive Summary  
+
+Machine Learning models were fit to predict movement classes based on on-body sensing information data. Both the Random Forest and the Gradient Boosting Machine models predicted movement class with an accuracy higher than 96%. However, the Random Forest model reached an extremely high accuracy of ~99.5% and was used to predict the movement classes for a test data set.  
+
+# Introduction  
+
+This project uses the [HAR (Human Activity Recognition) Weight Lifting Exercises dataset  set](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) (Velloso et al.). This data set seeks to explore the question of "how well" an exercise is performed, which has not received as much attention as the "how much" question, despite its large potential. The variables recorded include on-body sensing information on accelerometers on the belt, forearm, arm, measured on six young healthy males during the execution of unilateral dumbbell biceps curls. These curl movements were executed in five different fashions, one (class A) performed correctly, and the other four (classes B-E) in incorrect ways that correspond to common mistakes. The classes are described below:  
+
+Class A: exactly according to the specification  
+Class B: throwing the elbows to the front  
+Class C: lifting the dumbbell only halfway  
+Class D: lowering the dumbbell only halfway  
+Class E: throwing the hips to the front  
+
+
+# Data  
+
+The data has been previously divided into training (14,718 observations, known class) and a testing (20 observations, unknown class) data sets. Both data sets were loaded and cleaned in the same way.  
+
+## Load and clean data  
+
+Training and testing data set were loaded from csv files.  
+```{r, results='hide'}
+pml_training <- read_csv("C:/Users/yo/Dropbox/coursera/7_Practical_Machine_Learning/PMLproject/pml-training.csv",
+                         na=c("","NA"))
+pml_testing <- read_csv("C:/Users/yo/Dropbox/coursera/7_Practical_Machine_Learning/PMLproject/pml-testing.csv",
+                        na=c("","NA"))
+```
+First, several variables were eliminated that were mostly missing data by eliminating all variables with NA values.  
+```{r}
+pml_training <- pml_training[ , apply(pml_training, 2, function(x) !any(is.na(x)))]
+pml_testing <- pml_testing[ , apply(pml_testing, 2, function(x) !any(is.na(x)))]
+```
+Then the nearZValue function was used to find variables with very low variation which were then eliminated as well.  
+```{r, results='hide'}
+nearZValue<-nearZeroVar(pml_training,saveMetrics = T)
+pml_training <- pml_training[ ,!nearZValue$nzv]
+pml_testing <- pml_testing[ ,!nearZValue$nzv]
+```
+And finally the ID and timestamp variables were eliminated.  
+```{r}
+pml_training<-pml_training[,-c(1:6)]
+```
+
+## Explore data  
+
+Basic data exploration was conducted on the training data set and a table with the class frequency was created.  
+```{r}
+# str(pml_training)
+kable(table(pml_training$classe))
+```
+
+A correlation matrix was created to evaluate the presence of correlations between each and all the variables. The pre-processing step using PCA was performed and evaluated in a Random Forest model (results not shown) but resulted in a reduced accuracy as expected by the low presence of high correlations.  
+```{r}
+corrplot(cor(pml_training[,-53]), type="upper", order="FPC", method = "color",
+         col=brewer.pal(n=8, name="RdYlBu"))
+```
+
+# Model fitting  
+
+First, partitions of the training data set into training (75%) and validation (25%) data sets were created.  
+```{r}
+inTrain <- createDataPartition(y = pml_training$classe, p = 0.75, list = FALSE)
+training <- pml_training[inTrain,]
+validating <- pml_training[-inTrain,]
+```
+
+## Random Forest  
+
+Random Forest modeling is specially suited for classification problems and is known for its high prediction accuracy. The model was generated on the training data and reached the highest accuracy at 27 randomly selected predictors.  
+```{r}
+pml_model_rf <- train(classe ~ ., method = "rf", data = training)
+plot(pml_model_rf)
+kable(pml_model_rf$results)
+```
+The Random Forest model was then used to predict the validation data classes and evaluate the accuracy of the predictions by comparing them to the known classifications. The model's accuracy was equal to `acc_rf`, and the confusion matrix table is displayed below:  
+```{r}
+pml_pred_rf <- predict(pml_model_rf, newdata = validating)
+acc_rf <- round(confusionMatrix(pml_pred_rf, factor(validating$classe))$overall[1],4) #get accuracy
+kable(confusionMatrix(pml_pred_rf, factor(validating$classe))$table)
+```
+
+## Gradient Boosting Machine (GBM)  
+Boosting is specially suited to handle many possibly weak predictors by weighing and combining them into stronger predictors. The model was generated on the training data and reached the highest accuracy when more than 140 boosting iterations were computed.  
+```{r}
+# pml_model_gbm <- train(classe ~ ., method = "gbm", data = pml_training)
+pml_model_gbm <- train(classe ~ ., method = "gbm", data = training, verbose=FALSE)
+plot(pml_model_gbm)
+kable(pml_model_gbm$results)
+```
+The GBM model was then used to predict the validation data classes and evaluate the accuracy of the predictions by comparing them to the known classifications. The model's accuracy was equal to `acc_gbm`, and the confusion matrix table is displayed below:  
+```{r}
+pml_pred_gbm <- predict(pml_model_gbm, newdata = validating)
+acc_gbm <- round(confusionMatrix(pml_pred_gbm, factor(validating$classe))$overall[1],4)
+kable(confusionMatrix(pml_pred_gbm, factor(validating$classe))$table)
+```
+## Relative importance of variables  
+We can further explore the models created to know which variables have the greatest importance using Variable Importance Plots (VIP). For the Random Forest model the VIP lists the variables that had a higher effect decreasing the Gini split-criterion, while for the GBM model indicates highest relative influence. In both models the variables "roll_belt", "pitch_forearm", and "yaw_belt" are the most important.  
+```{r}
+varImpPlot(pml_model_rf$finalModel, main = "Variable Importance Plot - Random Forest Model")
+plot(varImp(object=pml_model_gbm),main="Variable Importance Plot - GBM")
+```
+# Prediction of weight lifting class in Test data set    
+
+Because of its higher accuracy, the Random Forest model was chosen to predict the classes for the testing data set. The predictions shown below include at least one observation for each of the 5 classes. 
+```{r}
+pml_pred_testing <- predict(pml_model_rf, newdata = pml_testing)
+pml_pred_testing
+kable(table(pml_pred_testing))
+```
+# Reference
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Activity Recognition of Weight Lifting Exercises.](http:/groupware.les.inf.puc-rio.br/har#ixzz4TkWi4DLm) Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
