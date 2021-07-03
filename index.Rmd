@@ -48,17 +48,20 @@ pml_training <- read_csv("C:/Users/yo/Dropbox/coursera/7_Practical_Machine_Learn
 pml_testing <- read_csv("C:/Users/yo/Dropbox/coursera/7_Practical_Machine_Learning/PMLproject/pml-testing.csv",
                         na=c("","NA"))
 ```
+
 First, several variables were eliminated that were mostly missing data by eliminating all variables with NA values.  
 ```{r}
 pml_training <- pml_training[ , apply(pml_training, 2, function(x) !any(is.na(x)))]
 pml_testing <- pml_testing[ , apply(pml_testing, 2, function(x) !any(is.na(x)))]
 ```
+
 Then the nearZValue function was used to find variables with very low variation which were then eliminated as well.  
 ```{r, results='hide'}
 nearZValue<-nearZeroVar(pml_training,saveMetrics = T)
 pml_training <- pml_training[ ,!nearZValue$nzv]
 pml_testing <- pml_testing[ ,!nearZValue$nzv]
 ```
+
 And finally the ID and timestamp variables were eliminated.  
 ```{r}
 pml_training<-pml_training[,-c(1:6)]
@@ -71,6 +74,7 @@ Basic data exploration was conducted on the training data set and a table with t
 # str(pml_training)
 kable(table(pml_training$classe), "html")
 ```
+&nbsp;
 
 A correlation matrix was created to evaluate the presence of correlations between each and all the variables. The pre-processing step using PCA was performed and evaluated in a Random Forest model (results not shown) but resulted in a reduced accuracy as expected by the low presence of high correlations.  
 ```{r}
@@ -95,12 +99,20 @@ pml_model_rf <- train(classe ~ ., method = "rf", data = training)
 plot(pml_model_rf)
 kable(pml_model_rf$results)
 ```
-The Random Forest model was then used to predict the validation data classes and evaluate the accuracy of the predictions by comparing them to the known classifications. The model's accuracy was equal to `acc_rf`, and the confusion matrix table is displayed below:  
+&nbsp;
+
+```{r, include=FALSE}
+pml_pred_rf <- predict(pml_model_rf, newdata = validating)
+acc_rf <- round(confusionMatrix(pml_pred_rf, factor(validating$classe))$overall[1],4) #get accuracy
+```
+
+The Random Forest model was then used to predict the validation data classes and evaluate the accuracy of the predictions by comparing them to the known classifications. The model's accuracy was equal to `r acc_rf`, and the confusion matrix table is displayed below:  
 ```{r}
 pml_pred_rf <- predict(pml_model_rf, newdata = validating)
 acc_rf <- round(confusionMatrix(pml_pred_rf, factor(validating$classe))$overall[1],4) #get accuracy
 kable(confusionMatrix(pml_pred_rf, factor(validating$classe))$table)
 ```
+&nbsp;
 
 ### Gradient Boosting Machine (GBM)  
 
@@ -111,7 +123,14 @@ pml_model_gbm <- train(classe ~ ., method = "gbm", data = training, verbose=FALS
 plot(pml_model_gbm)
 kable(pml_model_gbm$results)
 ```
-The GBM model was then used to predict the validation data classes and evaluate the accuracy of the predictions by comparing them to the known classifications. The model's accuracy was equal to `acc_gbm`, and the confusion matrix table is displayed below:  
+&nbsp;
+
+```{r, include=FALSE}
+pml_pred_gbm <- predict(pml_model_gbm, newdata = validating)
+acc_gbm <- round(confusionMatrix(pml_pred_gbm, factor(validating$classe))$overall[1],4)
+```
+
+The GBM model was then used to predict the validation data classes and evaluate the accuracy of the predictions by comparing them to the known classifications. The model's accuracy was equal to `r acc_gbm`, and the confusion matrix table is displayed below:  
 ```{r}
 pml_pred_gbm <- predict(pml_model_gbm, newdata = validating)
 acc_gbm <- round(confusionMatrix(pml_pred_gbm, factor(validating$classe))$overall[1],4)
